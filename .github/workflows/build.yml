@@ -1,27 +1,39 @@
-name: Build Mujde apk for Xפosed-framework
+name: Build and Release Mujde
 
 on:
   push:
     branches:
       - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v4
 
       - uses: actions/setup-java@v4
         with:
-          java-version: '21'
+          java-version: '17'
           distribution: 'temurin'
 
-      - name: Build APK
-        run: bash ./gradlew assembleRelease
+      - name: Install xz
+        run: sudo apt-get update && sudo apt-get install -y xz-utils
 
-      - name: Build AAB
-        run: bash ./gradlew bundleRelease
+      - name: Fetch Frida injectors
+        run: bash ./gradlew :app:fetchFridaInjectors --no-daemon
+
+      - name: Build debug APK
+        run: bash ./gradlew assembleDebug --no-daemon
+
+      - name: Build release APK
+        run: bash ./gradlew assembleRelease --no-daemon
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -30,20 +42,40 @@ jobs:
           python-version: '3.12'
 
       - name: Install signapp dependencies
-        run: pip install -r requirements.txt && buildapp_fetch_tools
+        run: |
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt && buildapp_fetch_tools
+          else
+            echo "No requirements.txt — skip signapp"
+          fi
 
-      - name: Sign apk
+      - name: Sign release APK (optional)
         working-directory: app/build/outputs/apk/release/
-        run: signapp -a app-release-unsigned.apk -o app-release.apk
+        run: |
+          if command -v signapp >/dev/null 2>&1 && [ -f app-release-unsigned.apk ]; then
+            signapp -a app-release-unsigned.apk -o Mujde-release.apk
+          elif [ -f app-release-unsigned.apk ]; then
+            cp app-release-unsigned.apk Mujde-release-unsigned.apk
+          fi
 
-      - name: Upload APK
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: mujde-apk
-          path: app/build/outputs/apk/release/app-release.apk
+          name: mujde-apks
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/release/*.apk
 
-      - name: Upload AAB
-        uses: actions/upload-artifact@v4
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
         with:
-          name: mujde-aab
-          path: app/build/outputs/bundle/release/app-release.aab
+          files: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/release/Mujde-release.apk
+            app/build/outputs/apk/release/Mujde-release-unsigned.apk
+            app/build/outputs/apk/release/app-release-unsigned.apk
+          generate_release_notes: true
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -7,6 +7,13 @@ public class Constants {
     public static final String PREF_AUTO_SCOPE = "pref_auto_apply_lsposed_scope";
     public static final String PREF_INJECT_DELAY_MS = "pref_inject_delay_ms";
     public static final String PREF_LAST_INJECT_SUMMARY = "pref_last_inject_summary";
+    public static final String PREF_SCRIPT_LOG_TAG = "pref_script_log_tag";
+    public static final String PREF_ANTIFRIDA = "pref_antifrida_enable";
+    public static final String PREF_ANTIFRIDA_AGGRESSIVE = "pref_antifrida_aggressive";
+    public static final String PREF_CONSOLE_BRIDGE = "pref_console_bridge";
+
+    public static final String DEFAULT_SCRIPT_LOG_TAG = "MUJDE_SCRIPT";
+    public static final String CONSOLE_BRIDGE_PATH = "/data/local/tmp/mujde-console.log";
 
     public static final String SCRIPTS_DIRECTORY_NAME = "scripts";
     public static final String LOGS_DIRECTORY_NAME = "logs";

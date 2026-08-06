@@ -9,6 +9,7 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
@@ -17,7 +18,8 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 对目标 PID 执行一次 frida-inject，多脚本合并为单个临时文件，避免二次挂 agent。
+ * 对目标 PID 执行一次 frida-inject。
+ * 合并顺序：console 桥 → 反 Frida（可选）→ 用户脚本。
  */
 public final class FridaInjector {
     private static final String TAG = "Mujde";
@@ -36,7 +38,6 @@ public final class FridaInjector {
         }
     }
 
-    /** 解析包名对应进程 PID 列表（可能多个）。 */
     public static List<Integer> resolvePids(String packageName) {
         List<Integer> pids = new ArrayList<>();
         if (packageName == null || packageName.isEmpty()) return pids;
@@ -90,13 +91,14 @@ public final class FridaInjector {
         }
 
         File bundle;
+        List<String> parts = new ArrayList<>();
         try {
-            bundle = buildBundle(app, existing, names);
+            bundle = buildBundle(app, prefs, existing, names, parts);
         } catch (Exception e) {
             return new Result(-1, "合并脚本失败: " + e.getMessage());
         }
 
-        String msg = "about to frida-inject [" + String.join(", ", names) + "] pid=" + pid + " pkg=" + packageName;
+        String msg = "about to frida-inject [" + String.join(", ", parts) + "] pid=" + pid + " pkg=" + packageName;
         Log.d(TAG, msg);
         LogStore.append(app, msg);
 
@@ -141,6 +143,8 @@ public final class FridaInjector {
             }
             LogStore.append(app, summary);
             saveLast(prefs, (code == 0 ? "OK " : "FAIL ") + packageName + " exit=" + code);
+            // 注入后顺便吸入 console 桥文件
+            LogStore.ingestConsoleBridge(app);
             return new Result(code, summary);
         } catch (Exception e) {
             String err = "注入异常: " + e.getMessage();
@@ -154,7 +158,12 @@ public final class FridaInjector {
         }
     }
 
-    private static File buildBundle(Context app, List<File> files, List<String> names) throws Exception {
+    private static File buildBundle(
+            Context app,
+            SharedPreferences prefs,
+            List<File> files,
+            List<String> names,
+            List<String> partsOut) throws Exception {
         File dir = new File(app.getCacheDir(), "inject_bundles");
         //noinspection ResultOfMethodCallIgnored
         dir.mkdirs();
@@ -163,6 +172,35 @@ public final class FridaInjector {
                 new OutputStreamWriter(new FileOutputStream(bundle), StandardCharsets.UTF_8))) {
             w.write("/* Mujde 自动合并脚本包 — 请勿手改 */\n");
             w.write("'use strict';\n");
+
+            boolean bridge = prefs == null || prefs.getBoolean(Constants.PREF_CONSOLE_BRIDGE, true);
+            if (bridge) {
+                String tag = prefs != null
+                        ? prefs.getString(Constants.PREF_SCRIPT_LOG_TAG, Constants.DEFAULT_SCRIPT_LOG_TAG)
+                        : Constants.DEFAULT_SCRIPT_LOG_TAG;
+                if (tag == null || tag.trim().isEmpty()) tag = Constants.DEFAULT_SCRIPT_LOG_TAG;
+                String bridgeJs = readAsset(app, "mujde_console_bridge.js")
+                        .replace("__MUJDE_LOG_TAG__", tag.trim());
+                w.write("\n/* ---- BEGIN console_bridge ---- */\n");
+                w.write(bridgeJs);
+                w.write("\n/* ---- END console_bridge ---- */\n");
+                partsOut.add("console_bridge");
+            }
+
+            boolean anti = prefs != null && prefs.getBoolean(Constants.PREF_ANTIFRIDA, false);
+            if (anti) {
+                w.write("\n/* ---- BEGIN antifrida_generic ---- */\n");
+                w.write(readAsset(app, "antifrida_generic.js"));
+                w.write("\n/* ---- END antifrida_generic ---- */\n");
+                partsOut.add("antifrida");
+                if (prefs.getBoolean(Constants.PREF_ANTIFRIDA_AGGRESSIVE, false)) {
+                    w.write("\n/* ---- BEGIN antifrida_aggressive ---- */\n");
+                    w.write(readAsset(app, "antifrida_aggressive.js"));
+                    w.write("\n/* ---- END antifrida_aggressive ---- */\n");
+                    partsOut.add("antifrida_agg");
+                }
+            }
+
             for (int i = 0; i < files.size(); i++) {
                 w.write("\n/* ---- BEGIN " + names.get(i) + " ---- */\n");
                 try (BufferedReader r = new BufferedReader(
@@ -174,10 +212,23 @@ public final class FridaInjector {
                     }
                 }
                 w.write("/* ---- END " + names.get(i) + " ---- */\n");
+                partsOut.add(names.get(i));
             }
         }
         AccessibilityUtils.makeFileWorldReadable(bundle);
         return bundle;
+    }
+
+    private static String readAsset(Context app, String name) throws Exception {
+        try (InputStream in = app.getAssets().open(name);
+             BufferedReader r = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = r.readLine()) != null) {
+                sb.append(line).append('\n');
+            }
+            return sb.toString();
+        }
     }
 
     private static void saveLast(SharedPreferences prefs, String summary) {

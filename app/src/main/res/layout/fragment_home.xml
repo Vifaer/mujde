@@ -55,7 +55,8 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:background="@drawable/bg_card"
-            android:orientation="vertical">
+            android:orientation="vertical"
+            android:paddingBottom="8dp">
 
             <androidx.appcompat.widget.SwitchCompat
                 android:id="@+id/switch_inject_once"
@@ -75,6 +76,52 @@
                 android:text="@string/auto_scope"
                 android:textColor="@color/on_surface" />
 
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/switch_console_bridge"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:paddingBottom="4dp"
+                android:text="@string/console_bridge"
+                android:textColor="@color/on_surface" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/switch_antifrida"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:paddingBottom="4dp"
+                android:text="@string/antifrida_enable"
+                android:textColor="@color/on_surface" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/switch_antifrida_agg"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:paddingBottom="4dp"
+                android:text="@string/antifrida_aggressive"
+                android:textColor="@color/on_surface" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:text="@string/script_log_tag_hint"
+                android:textColor="@color/on_surface_muted"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/edit_script_log_tag"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/script_log_tag_hint"
+                android:inputType="text"
+                android:maxLines="1"
+                android:textColor="@color/on_surface"
+                android:textColorHint="@color/on_surface_muted"
+                android:textSize="14sp" />
+
             <TextView
                 android:id="@+id/text_inject_delay_label"
                 android:layout_width="match_parent"
@@ -89,14 +136,43 @@
                 android:layout_height="wrap_content"
                 android:max="10000"
                 android:paddingBottom="8dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp"
+                android:text="@string/antifrida_boundary_hint"
+                android:textColor="@color/on_surface_muted"
+                android:textSize="11sp" />
         </LinearLayout>
 
         <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_refresh_status"
+            android:id="@+id/btn_health_check"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:text="@string/refresh" />
+            android:text="@string/health_check" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_refresh_status"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/refresh"
+            android:textColor="@color/accent"
+            app:strokeColor="@color/accent" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_open_root"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/open_root_manager"
+            android:textColor="@color/accent"
+            app:strokeColor="@color/accent" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_open_lsposed"
@@ -105,6 +181,16 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:text="@string/open_lsposed"
+            android:textColor="@color/accent"
+            app:strokeColor="@color/accent" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_export_zygisk"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/export_zygisk_config"
             android:textColor="@color/accent"
             app:strokeColor="@color/accent" />
     </LinearLayout>

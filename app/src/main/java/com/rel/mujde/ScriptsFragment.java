@@ -102,7 +102,8 @@ public class ScriptsFragment extends Fragment {
                 getString(R.string.import_js),
                 getString(R.string.import_zip),
                 getString(R.string.export_zip),
-                getString(R.string.import_examples)
+                getString(R.string.import_examples),
+                getString(R.string.create_from_template)
         };
         new AlertDialog.Builder(requireContext())
                 .setTitle(R.string.import_menu_title)
@@ -120,8 +121,38 @@ public class ScriptsFragment extends Fragment {
                         case 3:
                             importExamples();
                             break;
+                        case 4:
+                            showTemplateWizard();
+                            break;
                         default:
                             break;
+                    }
+                })
+                .show();
+    }
+
+    private void showTemplateWizard() {
+        if (!isAdded()) return;
+        CharSequence[] kinds = new CharSequence[]{
+                getString(R.string.template_hello),
+                getString(R.string.template_skeleton),
+                getString(R.string.template_skeleton_af)
+        };
+        new AlertDialog.Builder(requireContext())
+                .setTitle(R.string.create_from_template)
+                .setItems(kinds, (d, which) -> {
+                    String kind = which == 1 ? "skeleton" : (which == 2 ? "skeleton_af" : "hello");
+                    try {
+                        String name = ScriptTemplates.create(requireContext(), kind);
+                        Toast.makeText(requireContext(), getString(R.string.template_created, name), Toast.LENGTH_SHORT).show();
+                        loadScripts();
+                        Intent i = new Intent(requireContext(), ScriptEditorActivity.class);
+                        i.putExtra(ScriptEditorActivity.EXTRA_SCRIPT_NAME, name);
+                        startActivity(i);
+                    } catch (Exception e) {
+                        Toast.makeText(requireContext(),
+                                getString(R.string.import_failed, String.valueOf(e.getMessage())),
+                                Toast.LENGTH_LONG).show();
                     }
                 })
                 .show();

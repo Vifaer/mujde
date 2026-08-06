@@ -115,4 +115,62 @@ public final class LogStore {
             f.delete();
         }
     }
+
+    /**
+     * 吸入脚本 console 桥文件（/data/local/tmp/mujde-console.log）。
+     * 优先直接读；失败再用 su。
+     *
+     * @return 新吸入行数
+     */
+    public static int ingestConsoleBridge(Context context) {
+        Context app = context.getApplicationContext();
+        String content = null;
+        File direct = new File(Constants.CONSOLE_BRIDGE_PATH);
+        if (direct.canRead()) {
+            try {
+                content = readFileLimited(direct, 256 * 1024);
+            } catch (IOException ignored) {
+            }
+        }
+        if (content == null || content.isEmpty()) {
+            RootShell.Result r = RootShell.exec(
+                    "test -f '" + Constants.CONSOLE_BRIDGE_PATH + "' && cat '" + Constants.CONSOLE_BRIDGE_PATH + "' || true",
+                    8000);
+            if (r.output != null && !r.output.trim().isEmpty()) {
+                content = r.output;
+            }
+        }
+        if (content == null || content.trim().isEmpty()) {
+            return 0;
+        }
+        String[] lines = content.split("\n");
+        int n = 0;
+        StringBuilder chunk = new StringBuilder();
+        chunk.append("---- 脚本 console 桥 ----\n");
+        for (String line : lines) {
+            if (line == null || line.isEmpty()) continue;
+            chunk.append(line).append('\n');
+            n++;
+            if (chunk.length() > 120_000) break;
+        }
+        if (n > 0) {
+            appendSync(app, chunk.toString().trim());
+            // 清空桥文件，避免重复吸入
+            RootShell.exec("truncate -s 0 '" + Constants.CONSOLE_BRIDGE_PATH + "' 2>/dev/null || : > '"
+                    + Constants.CONSOLE_BRIDGE_PATH + "'", 5000);
+        }
+        return n;
+    }
+
+    private static String readFileLimited(File file, int maxBytes) throws IOException {
+        StringBuilder sb = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line).append('\n');
+                if (sb.length() > maxBytes) break;
+            }
+        }
+        return sb.toString();
+    }
 }

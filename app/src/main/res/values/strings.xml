@@ -83,4 +83,22 @@
     <string name="badge_scope_no">作用域 ✗</string>
     <string name="load_scripts_failed">加载脚本失败：%1$s</string>
     <string name="long_press_inject_hint">长按已绑定应用可立即注入（忽略「只注入一次」去重）</string>
+    <string name="console_bridge">注入时附带 console→Logs 桥</string>
+    <string name="script_log_tag_hint">脚本日志 TAG（liblog）</string>
+    <string name="antifrida_enable">自动附带通用反 Frida（默认关）</string>
+    <string name="antifrida_aggressive">反 Frida 激进档（exec 过滤，易误伤）</string>
+    <string name="antifrida_boundary_hint">反 Frida 仅覆盖经典启发式，且晚于 Activity.onCreate；启动期强对抗请用「导出 Zygisk 配置」。仅供研究/自有应用测试。</string>
+    <string name="health_check">一键健康检查</string>
+    <string name="health_check_running">正在检查…</string>
+    <string name="open_root_manager">打开 Root 管理器</string>
+    <string name="root_manager_not_found">未找到 KernelSU/Magisk，请手动授权 com.rel.mujde</string>
+    <string name="export_zygisk_config">导出 Zygisk/早注入配置</string>
+    <string name="export_zygisk_ok">已导出对接说明</string>
+    <string name="pull_console">脚本console</string>
+    <string name="console_bridge_pulled">已吸入 %1$d 行脚本 console</string>
+    <string name="create_from_template">从模板创建</string>
+    <string name="template_hello">Hello（最小连通）</string>
+    <string name="template_skeleton">Skeleton（存活验证）</string>
+    <string name="template_skeleton_af">Skeleton + 反 Frida 说明</string>
+    <string name="template_created">已创建 %1$s</string>
 </resources>

@@ -5,7 +5,7 @@ LSPosed 模块形态的 **真 Frida 注入管理器**（包名 `com.rel.mujde`�
 维护本地 Frida JS 脚本库 → 按 App 勾选绑定 → 目标 `Activity.onCreate` 时以 root 调用 `libfrida-inject.so` 注入。
 
 > 上游：https://github.com/mon231/com.rel.mujde  
-> 本仓库：本地改造 fork（v1.1.3：合并注入 / 延迟 / 立即注入 / SAF / 解绑清 scope）  
+> 本仓库：本地改造 fork（v1.2.0：可观测性 / 反 Frida / Zygisk 导出 / CI 拉 inject）  
 > LSPosed 模块页：https://modules.lsposed.org/module/com.rel.mujde/  
 > Frida 版本钉死：**17.16.4**
 
@@ -322,7 +322,7 @@ Release 可参考 [`BUILD.md`](BUILD.md)。
 
 | 文档 | 内容 |
 |------|------|
-| [`docs/zh/`](docs/zh/) | 完整中文手册（快速开始 / 路径 / 规范 / 对比 / 排障） |
+| [`docs/zh/`](docs/zh/) | 完整中文手册（含 [场景矩阵与早注入](docs/zh/06_场景矩阵与早注入.md)） |
 | [`docs/scripts/examples/`](docs/scripts/examples/) | 示例脚本 |
 | [`operit-skill/SKILL.md`](operit-skill/SKILL.md) | Operit / Agent 用的脚本开发 Skill |
 | [`BUILD.md`](BUILD.md) | 编译细节 |

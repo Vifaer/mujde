@@ -16,14 +16,14 @@ description: 编写/部署/调试 Mujde（com.rel.mujde）真 Frida 脚本。覆
 | 项 | 值 |
 |----|-----|
 | 包名 | `com.rel.mujde` |
-| 版本 | **1.1.2**（源码仓库 https://github.com/Vifaer/mujde ，本地 `frida-modules-dl/mujde-app/`） |
+| 版本 | **1.2.0**（源码仓库 https://github.com/Vifaer/mujde ，本地 `frida-modules-dl/mujde-app/`） |
 | 引擎 | 真 Frida **17.16.4**（`su -c …/libfrida-inject.so -e -p PID -s script.js`） |
 | 脚本目录 | `/data/data/com.rel.mujde/files/scripts/` |
-| 日志目录 | `/data/data/com.rel.mujde/files/logs/`（应用内 Logs 页） |
+| 日志目录 | `/data/data/com.rel.mujde/files/logs/`（应用内 Logs 页；console 桥：`/data/local/tmp/mujde-console.log`） |
 | 暂存目录 | `/sdcard/Download/frida-modules/mujde/scripts/examples/` |
-| 文档目录 | `frida-modules-dl/mujde/` |
+| 文档目录 | `frida-modules-dl/mujde/` / 仓库 `docs/zh/` |
 | 绑定方式 | Mujde → Apps 勾选；保存时可自动写 LSPosed scope |
-| 注入时机 | 目标 `Activity.onCreate`（默认每进程一次） |
+| 注入时机 | 目标 `Activity.onCreate`（默认每进程一次）；多脚本+可选反 Frida **同一次** inject |
 | prefs | `/data/misc/apexdata/<GUID>/prefs/com.rel.mujde/mujde_prefs.xml` |
 
 ## 强制规范
@@ -51,9 +51,9 @@ function waitModule(name, cb) {
 }
 ```
 
-### 3. 日志：优先 liblog
+### 3. 日志：console 桥 + liblog
 
-`console.log` 经 Mujde 经常进不了 logcat：
+v1.2+ 默认附带 console 桥：写入 `/data/local/tmp/mujde-console.log`，Logs 页约 2s 吸入；同时可用 liblog（首页可改 TAG）：
 
 ```javascript
 function alog(msg) {
@@ -69,7 +69,9 @@ function alog(msg) {
 }
 ```
 
-排障同时看：`adb logcat -s "[Mujde]:D"`。
+排障：`adb logcat -s Mujde:D` / `MUJDE_SCRIPT:I` / `MUJDE_ANTIFRIDA:I`。
+
+反 Frida 首页开关默认关；与用户脚本同一次 inject。启动期强对抗见 `docs/zh/06_场景矩阵与早注入.md`。
 
 ### 4. 短函数禁止 patch（已验证闪退）
 

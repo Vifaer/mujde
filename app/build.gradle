@@ -2,6 +2,10 @@ plugins {
     id 'com.android.application'
 }
 
+import java.net.URL
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+
 def pinnedFridaVersion = (findProperty('FRIDA_VERSION') ?: '17.16.4').toString()
 
 android {
@@ -11,8 +15,8 @@ android {
         applicationId "com.rel.mujde"
         minSdk 21
         targetSdk 34
-        versionCode 5
-        versionName "1.1.3"
+        versionCode 6
+        versionName "1.2.0"
 
         buildConfigField "String", "FRIDA_VERSION", "\"${pinnedFridaVersion}\""
     }
@@ -46,29 +50,93 @@ android {
             jniLibs.srcDirs = ['src/main/jniLibs']
         }
     }
+}
 
-    // Frida injectors are vendored under src/main/jniLibs (pinned FRIDA_VERSION).
-    // Re-download manually if bumping version:
-    //   frida-inject-<ver>-android-{arm,arm64,x86,x86_64}.xz -> libfrida-inject.so
-    task verifyFrida {
-        doLast {
-            def stamp = new File(projectDir, 'src/main/jniLibs/.frida-version')
-            def archs = ['armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64']
-            archs.each { arch ->
-                def f = new File(projectDir, "src/main/jniLibs/${arch}/libfrida-inject.so")
-                if (!f.exists() || f.length() < 1000000) {
-                    throw new GradleException("Missing Frida injector for ${arch}. Place libfrida-inject.so (version ${pinnedFridaVersion})")
+// Frida inject：缺失时从 GitHub Releases 拉取 .xz 并解压到 jniLibs
+def fridaArchMap = [
+        'armeabi-v7a': 'arm',
+        'arm64-v8a'  : 'arm64',
+        'x86'        : 'x86',
+        'x86_64'     : 'x86_64'
+]
+
+task fetchFridaInjectors {
+    description = "Download frida-inject ${pinnedFridaVersion} into jniLibs if missing"
+    doLast {
+        def cacheDir = new File(project.buildDir, "frida-cache/${pinnedFridaVersion}")
+        cacheDir.mkdirs()
+        fridaArchMap.each { abi, fridaArch ->
+            def dest = new File(projectDir, "src/main/jniLibs/${abi}/libfrida-inject.so")
+            dest.parentFile.mkdirs()
+            if (dest.exists() && dest.length() > 1_000_000) {
+                println "OK ${abi}: ${dest.length()} bytes"
+                return
+            }
+            def asset = "frida-inject-${pinnedFridaVersion}-android-${fridaArch}.xz"
+            def url = "https://github.com/frida/frida/releases/download/${pinnedFridaVersion}/${asset}"
+            def xzFile = new File(cacheDir, asset)
+            if (!xzFile.exists() || xzFile.length() < 1000) {
+                println "Downloading ${url}"
+                xzFile.withOutputStream { out ->
+                    new URL(url).openStream().with { inp ->
+                        out << inp
+                        inp.close()
+                    }
                 }
             }
-            if (stamp.exists()) {
-                println "Using vendored Frida ${stamp.text.trim()}"
-            } else {
-                println "Using vendored Frida (expected ${pinnedFridaVersion})"
+            // 优先系统 xz；否则尝试 7z；再否则报错提示安装 xz
+            def tmpSo = new File(cacheDir, "libfrida-inject-${abi}.so")
+            def extracted = false
+            try {
+                def pb = new ProcessBuilder("xz", "-dkc", xzFile.absolutePath)
+                pb.redirectErrorStream(true)
+                def p = pb.start()
+                tmpSo.withOutputStream { out -> out << p.inputStream }
+                def code = p.waitFor()
+                if (code == 0 && tmpSo.length() > 1_000_000) extracted = true
+            } catch (Exception ignored) {
+            }
+            if (!extracted) {
+                try {
+                    def pb = new ProcessBuilder("7z", "e", "-y", "-o${cacheDir.absolutePath}", xzFile.absolutePath)
+                    pb.redirectErrorStream(true)
+                    def p = pb.start()
+                    p.waitFor()
+                    def unpacked = new File(cacheDir, asset.replace('.xz', ''))
+                    if (unpacked.exists()) {
+                        Files.copy(unpacked.toPath(), tmpSo.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                        if (tmpSo.length() > 1_000_000) extracted = true
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+            if (!extracted || !tmpSo.exists() || tmpSo.length() < 1_000_000) {
+                throw new GradleException(
+                        "无法解压 ${asset}。请安装 xz（Linux: xz-utils）或手动放入 ${dest.absolutePath}")
+            }
+            Files.copy(tmpSo.toPath(), dest.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            println "Wrote ${dest}"
+        }
+        def stamp = new File(projectDir, 'src/main/jniLibs/.frida-version')
+        stamp.text = pinnedFridaVersion + '\n'
+    }
+}
+
+task verifyFrida {
+    dependsOn fetchFridaInjectors
+    doLast {
+        def stamp = new File(projectDir, 'src/main/jniLibs/.frida-version')
+        fridaArchMap.keySet().each { arch ->
+            def f = new File(projectDir, "src/main/jniLibs/${arch}/libfrida-inject.so")
+            if (!f.exists() || f.length() < 1000000) {
+                throw new GradleException("Missing Frida injector for ${arch}. Expected ${pinnedFridaVersion}")
             }
         }
+        println "Using Frida ${stamp.exists() ? stamp.text.trim() : pinnedFridaVersion}"
     }
-    preBuild.dependsOn verifyFrida
 }
+
+preBuild.dependsOn verifyFrida
 
 dependencies {
     implementation 'androidx.core:core:1.12.0'

@@ -21,6 +21,15 @@
             android:textColor="@color/accent" />
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_pull_console"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/pull_console"
+            android:textColor="@color/accent" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_pull_logcat"
             style="@style/Widget.MaterialComponents.Button.TextButton"
             android:layout_width="0dp"
