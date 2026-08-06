@@ -25,7 +25,7 @@ public class LogFragment extends Fragment {
     private final Runnable autoRefresh = new Runnable() {
         @Override
         public void run() {
-            if (!isAdded() || !isVisible()) return;
+            if (!isAdded() || isHidden() || !isVisible()) return;
             softRefresh();
             uiHandler.postDelayed(this, 2000);
         }
@@ -67,19 +67,37 @@ public class LogFragment extends Fragment {
     public void onResume() {
         super.onResume();
         refresh();
-        uiHandler.removeCallbacks(autoRefresh);
-        uiHandler.postDelayed(autoRefresh, 2000);
+        startAutoRefresh();
     }
 
     @Override
     public void onPause() {
         super.onPause();
+        stopAutoRefresh();
+    }
+
+    @Override
+    public void onHiddenChanged(boolean hidden) {
+        super.onHiddenChanged(hidden);
+        if (hidden) {
+            stopAutoRefresh();
+        } else if (isResumed()) {
+            refresh();
+            startAutoRefresh();
+        }
+    }
+
+    private void startAutoRefresh() {
+        stopAutoRefresh();
+        uiHandler.postDelayed(autoRefresh, 2000);
+    }
+
+    private void stopAutoRefresh() {
         uiHandler.removeCallbacks(autoRefresh);
     }
 
     private void softRefresh() {
-        if (!isAdded() || logText == null) return;
-        // 后台吸入桥文件再刷新，避免阻塞 UI
+        if (!isAdded() || logText == null || isHidden()) return;
         final Context appCtx = requireContext().getApplicationContext();
         new Thread(() -> {
             LogStore.ingestConsoleBridge(appCtx);

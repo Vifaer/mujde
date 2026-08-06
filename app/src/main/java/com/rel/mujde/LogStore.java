@@ -116,34 +116,77 @@ public final class LogStore {
         }
     }
 
+    private static volatile long sBridgeOffset;
+    private static final long BRIDGE_HARD_CAP = 1024L * 1024L;
+
     /**
-     * 吸入脚本 console 桥文件（/data/local/tmp/mujde-console.log）。
-     * 优先直接读；失败再用 su。
+     * 吸入脚本 console 桥文件（增量 + 尽量清空，防 2s 重复灌日志）。
      *
      * @return 新吸入行数
      */
     public static int ingestConsoleBridge(Context context) {
         Context app = context.getApplicationContext();
-        String content = null;
         File direct = new File(Constants.CONSOLE_BRIDGE_PATH);
+        long fileLen = 0;
+        byte[] raw = null;
+
         if (direct.canRead()) {
             try {
-                content = readFileLimited(direct, 256 * 1024);
+                fileLen = direct.length();
+                if (fileLen > BRIDGE_HARD_CAP) {
+                    forceClearBridge(app, "桥文件超过 1MB，已强制清理");
+                    sBridgeOffset = 0;
+                    return 0;
+                }
+                raw = readFileBytes(direct, (int) Math.min(fileLen, BRIDGE_HARD_CAP));
             } catch (IOException ignored) {
             }
         }
-        if (content == null || content.isEmpty()) {
+        if (raw == null) {
             RootShell.Result r = RootShell.exec(
-                    "test -f '" + Constants.CONSOLE_BRIDGE_PATH + "' && cat '" + Constants.CONSOLE_BRIDGE_PATH + "' || true",
+                    "test -f '" + Constants.CONSOLE_BRIDGE_PATH + "' && wc -c < '"
+                            + Constants.CONSOLE_BRIDGE_PATH + "' && echo '---' && cat '"
+                            + Constants.CONSOLE_BRIDGE_PATH + "' || true",
                     8000);
             if (r.output != null && !r.output.trim().isEmpty()) {
-                content = r.output;
+                String out = r.output;
+                int sep = out.indexOf("---");
+                if (sep >= 0) {
+                    try {
+                        fileLen = Long.parseLong(out.substring(0, sep).trim().split("\\s+")[0]);
+                    } catch (Exception ignored) {
+                        fileLen = out.length();
+                    }
+                    String body = out.substring(sep + 3).trim();
+                    if (fileLen > BRIDGE_HARD_CAP) {
+                        forceClearBridge(app, "桥文件超过 1MB，已强制清理");
+                        sBridgeOffset = 0;
+                        return 0;
+                    }
+                    raw = body.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                    fileLen = raw.length;
+                } else {
+                    raw = out.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                    fileLen = raw.length;
+                }
             }
         }
-        if (content == null || content.trim().isEmpty()) {
+        if (raw == null || raw.length == 0) {
+            sBridgeOffset = 0;
             return 0;
         }
-        String[] lines = content.split("\n");
+
+        int start = (int) Math.min(Math.max(0, sBridgeOffset), raw.length);
+        if (start >= raw.length) {
+            // 无增量：尝试清空后复位
+            if (tryClearBridge()) {
+                sBridgeOffset = 0;
+            }
+            return 0;
+        }
+
+        String delta = new String(raw, start, raw.length - start, java.nio.charset.StandardCharsets.UTF_8);
+        String[] lines = delta.split("\n");
         int n = 0;
         StringBuilder chunk = new StringBuilder();
         chunk.append("---- 脚本 console 桥 ----\n");
@@ -153,13 +196,65 @@ public final class LogStore {
             n++;
             if (chunk.length() > 120_000) break;
         }
+
+        boolean cleared = tryClearBridge();
         if (n > 0) {
-            appendSync(app, chunk.toString().trim());
-            // 清空桥文件，避免重复吸入
-            RootShell.exec("truncate -s 0 '" + Constants.CONSOLE_BRIDGE_PATH + "' 2>/dev/null || : > '"
-                    + Constants.CONSOLE_BRIDGE_PATH + "'", 5000);
+            if (cleared) {
+                appendSync(app, chunk.toString().trim());
+                sBridgeOffset = 0;
+            } else {
+                // 清空失败：只更新水位，避免下一轮重复整文件灌入
+                sBridgeOffset = fileLen;
+                appendSync(app, chunk.toString().trim() + "\n（桥文件未能清空，后续仅吸入增量）");
+            }
+        } else if (cleared) {
+            sBridgeOffset = 0;
+        } else {
+            sBridgeOffset = fileLen;
         }
         return n;
+    }
+
+    private static boolean tryClearBridge() {
+        File f = new File(Constants.CONSOLE_BRIDGE_PATH);
+        try {
+            if (f.exists() && f.canWrite()) {
+                try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(f, "rw")) {
+                    raf.setLength(0);
+                }
+                return f.length() == 0;
+            }
+        } catch (Exception ignored) {
+        }
+        RootShell.Result r = RootShell.exec(
+                "truncate -s 0 '" + Constants.CONSOLE_BRIDGE_PATH
+                        + "' 2>/dev/null || : > '" + Constants.CONSOLE_BRIDGE_PATH + "'; echo ok",
+                5000);
+        return r.output != null && r.output.contains("ok");
+    }
+
+    private static void forceClearBridge(Context app, String reason) {
+        LogStore.appendSync(app, "---- 脚本 console 桥 ----\n" + reason);
+        RootShell.exec(
+                "rm -f '" + Constants.CONSOLE_BRIDGE_PATH + "' 2>/dev/null; : > '"
+                        + Constants.CONSOLE_BRIDGE_PATH + "'; chmod 666 '"
+                        + Constants.CONSOLE_BRIDGE_PATH + "' 2>/dev/null; echo ok",
+                5000);
+    }
+
+    private static byte[] readFileBytes(File file, int maxBytes) throws IOException {
+        try (java.io.FileInputStream in = new java.io.FileInputStream(file)) {
+            byte[] buf = new byte[Math.max(0, maxBytes)];
+            int off = 0;
+            int n;
+            while (off < buf.length && (n = in.read(buf, off, buf.length - off)) >= 0) {
+                off += n;
+            }
+            if (off == buf.length) return buf;
+            byte[] exact = new byte[off];
+            System.arraycopy(buf, 0, exact, 0, off);
+            return exact;
+        }
     }
 
     private static String readFileLimited(File file, int maxBytes) throws IOException {

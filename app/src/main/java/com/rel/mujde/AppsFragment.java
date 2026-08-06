@@ -267,7 +267,16 @@ public class AppsFragment extends Fragment implements SearchView.OnQueryTextList
     @Override
     public void onResume() {
         super.onResume();
-        if (loadedOnce && isVisible()) {
+        if (loadedOnce && isVisible() && !isHidden()) {
+            loadAppScriptMappings();
+            refreshScopeAndMappings();
+        }
+    }
+
+    @Override
+    public void onHiddenChanged(boolean hidden) {
+        super.onHiddenChanged(hidden);
+        if (!hidden && isResumed() && loadedOnce) {
             loadAppScriptMappings();
             refreshScopeAndMappings();
         }

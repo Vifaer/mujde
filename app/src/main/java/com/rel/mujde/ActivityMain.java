@@ -1,7 +1,10 @@
 package com.rel.mujde;
 
+import static android.content.Context.MODE_PRIVATE;
+import static android.content.Context.MODE_WORLD_READABLE;
+
 import android.os.Bundle;
-import android.os.Process;
+import android.widget.Toast;
 
 import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AlertDialog;
@@ -28,11 +31,15 @@ public class ActivityMain extends AppCompatActivity {
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
+        boolean xposedPrefs = true;
         try {
             getSharedPreferences(Constants.SHARED_PREF_FILE_NAME, MODE_WORLD_READABLE);
         } catch (Exception e) {
-            suggestPartialInitialization();
-            return;
+            xposedPrefs = false;
+            try {
+                getSharedPreferences(Constants.SHARED_PREF_FILE_NAME, MODE_PRIVATE);
+            } catch (Exception ignored) {
+            }
         }
 
         try {
@@ -43,17 +50,14 @@ public class ActivityMain extends AppCompatActivity {
         initializeFragments();
         setupNavigation();
         setupBackPressHandling();
-    }
 
-    private void suggestPartialInitialization() {
-        new AlertDialog.Builder(this)
-                .setMessage(R.string.module_not_enabled)
-                .setPositiveButton(R.string.close, (dialog, which) -> {
-                    Process.killProcess(Process.myPid());
-                    System.exit(1);
-                })
-                .setCancelable(false)
-                .show();
+        if (!xposedPrefs) {
+            Toast.makeText(this, R.string.prefs_fallback_warning, Toast.LENGTH_LONG).show();
+            new AlertDialog.Builder(this)
+                    .setMessage(R.string.prefs_fallback_warning)
+                    .setPositiveButton(android.R.string.ok, null)
+                    .show();
+        }
     }
 
     private void setupBackPressHandling() {
@@ -93,7 +97,6 @@ public class ActivityMain extends AppCompatActivity {
             }
             return true;
         });
-        // 默认选中状态页（会触发 showFragment）
         bottomNavigationView.setSelectedItemId(R.id.navigation_home);
     }
 

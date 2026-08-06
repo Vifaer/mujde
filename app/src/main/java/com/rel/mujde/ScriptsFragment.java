@@ -378,6 +378,20 @@ public class ScriptsFragment extends Fragment {
                 .setPositiveButton(R.string.delete, (d, w) -> {
                     File f = ScriptUtils.getScriptFile(requireContext(), scriptName);
                     if (f.delete()) {
+                        try {
+                            android.content.SharedPreferences prefs;
+                            try {
+                                prefs = requireContext().getSharedPreferences(
+                                        Constants.SHARED_PREF_FILE_NAME,
+                                        android.content.Context.MODE_WORLD_READABLE);
+                            } catch (Exception e) {
+                                prefs = requireContext().getSharedPreferences(
+                                        Constants.SHARED_PREF_FILE_NAME,
+                                        android.content.Context.MODE_PRIVATE);
+                            }
+                            ScriptUtils.removeScriptFromAllMappings(prefs, scriptName);
+                        } catch (Exception ignored) {
+                        }
                         loadScripts();
                     } else {
                         Toast.makeText(requireContext(), R.string.script_delete_failed, Toast.LENGTH_SHORT).show();

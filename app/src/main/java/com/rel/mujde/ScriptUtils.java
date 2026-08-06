@@ -70,6 +70,34 @@ public class ScriptUtils {
         }
     }
 
+    /** 从所有应用绑定中移除指定脚本名（删文件后调用）。 */
+    public static void removeScriptFromAllMappings(SharedPreferences prefs, String scriptName) {
+        if (prefs == null || scriptName == null || scriptName.isEmpty()) return;
+        try {
+            String jsonString = prefs.getString(Constants.PREF_APP_SCRIPTS_MAP, "{}");
+            JSONObject jsonObject = new JSONObject(jsonString);
+            Iterator<String> keys = jsonObject.keys();
+            JSONObject updated = new JSONObject();
+            while (keys.hasNext()) {
+                String pkg = keys.next();
+                JSONArray arr = jsonObject.getJSONArray(pkg);
+                JSONArray kept = new JSONArray();
+                for (int i = 0; i < arr.length(); i++) {
+                    String s = arr.getString(i);
+                    if (!scriptName.equals(s)) {
+                        kept.put(s);
+                    }
+                }
+                if (kept.length() > 0) {
+                    updated.put(pkg, kept);
+                }
+            }
+            prefs.edit().putString(Constants.PREF_APP_SCRIPTS_MAP, updated.toString()).apply();
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+    }
+
     public static Map<String, List<String>> getAllAppScriptMappings(SharedPreferences prefs) {
         Map<String, List<String>> appScriptMappings = new HashMap<>();
         try {

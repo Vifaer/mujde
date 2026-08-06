@@ -40,19 +40,11 @@ public final class FridaInjector {
 
     public static List<Integer> resolvePids(String packageName) {
         List<Integer> pids = new ArrayList<>();
-        if (packageName == null || packageName.isEmpty()) return pids;
+        if (!PidOwner.isSafePackageName(packageName)) return pids;
         try {
             ProcessBuilder pb = new ProcessBuilder("su", "-c", "pidof " + packageName);
-            pb.redirectErrorStream(true);
-            Process p = pb.start();
-            StringBuilder out = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) out.append(line).append(' ');
-            }
-            p.waitFor(5, TimeUnit.SECONDS);
-            for (String tok : out.toString().trim().split("\\s+")) {
+            ProcessIo.Outcome o = ProcessIo.run(pb, 5000, 4096);
+            for (String tok : o.output.trim().split("\\s+")) {
                 if (tok.isEmpty()) continue;
                 try {
                     pids.add(Integer.parseInt(tok));
@@ -65,7 +57,28 @@ public final class FridaInjector {
         return pids;
     }
 
-    public static Result inject(Context app, SharedPreferences prefs, int pid, String packageName, List<String> scripts) {
+    /**
+     * @param skipPidOwnerCheck true 时跳过 cmdline 校验（injectNow 已用 pidof）
+     */
+    public static Result inject(
+            Context app,
+            SharedPreferences prefs,
+            int pid,
+            String packageName,
+            List<String> scripts,
+            boolean skipPidOwnerCheck) {
+        if (pid < 1) {
+            return new Result(-1, "无效 pid");
+        }
+        if (!PidOwner.isSafePackageName(packageName)) {
+            return new Result(-1, "非法包名");
+        }
+        if (!skipPidOwnerCheck && !PidOwner.owns(pid, packageName)) {
+            String msg = "pid_owner_mismatch pid=" + pid + " pkg=" + packageName;
+            LogStore.append(app, msg);
+            return new Result(-1, msg);
+        }
+
         final String injector = app.getApplicationInfo().nativeLibraryDir + "/libfrida-inject.so";
         File inj = new File(injector);
         if (!inj.exists()) {
@@ -94,6 +107,11 @@ public final class FridaInjector {
         List<String> parts = new ArrayList<>();
         try {
             bundle = buildBundle(app, prefs, existing, names, parts);
+            if (!isSafeBundlePath(app, bundle)) {
+                //noinspection ResultOfMethodCallIgnored
+                bundle.delete();
+                return new Result(-1, "非法 bundle 路径");
+            }
         } catch (Exception e) {
             return new Result(-1, "合并脚本失败: " + e.getMessage());
         }
@@ -103,47 +121,24 @@ public final class FridaInjector {
         LogStore.append(app, msg);
 
         try {
-            ProcessBuilder pb = new ProcessBuilder(
-                    "su", "-c",
-                    injector + " -e -p " + pid + " -s " + bundle.getAbsolutePath()
-            );
-            pb.redirectErrorStream(true);
-            Process process = pb.start();
+            String cmd = quote(injector) + " -e -p " + pid + " -s " + quote(bundle.getAbsolutePath());
+            ProcessBuilder pb = new ProcessBuilder("su", "-c", cmd);
+            ProcessIo.Outcome o = ProcessIo.run(pb, Constants.INJECT_TIMEOUT_MS, 64 * 1024);
 
-            StringBuilder out = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    out.append(line).append('\n');
-                    if (out.length() > 64 * 1024) break;
-                }
-            }
-
-            boolean finished;
-            if (android.os.Build.VERSION.SDK_INT >= 26) {
-                finished = process.waitFor(Constants.INJECT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-            } else {
-                process.waitFor();
-                finished = true;
-            }
-
-            if (!finished) {
-                process.destroy();
+            if (o.timedOut) {
                 String summary = "TIMEOUT pkg=" + packageName + " scripts=" + names;
                 LogStore.append(app, "inject TIMEOUT " + summary);
                 saveLast(prefs, summary);
                 return new Result(-1, summary);
             }
 
-            int code = process.exitValue();
+            int code = o.exitCode;
             String summary = "inject exit=" + code + " scripts=" + names + " pkg=" + packageName;
-            if (out.length() > 0) {
-                summary += " out=" + out.toString().trim();
+            if (!o.output.isEmpty()) {
+                summary += " out=" + o.output;
             }
             LogStore.append(app, summary);
             saveLast(prefs, (code == 0 ? "OK " : "FAIL ") + packageName + " exit=" + code);
-            // 注入后顺便吸入 console 桥文件
             LogStore.ingestConsoleBridge(app);
             return new Result(code, summary);
         } catch (Exception e) {
@@ -153,8 +148,48 @@ public final class FridaInjector {
             saveLast(prefs, "ERROR " + e.getMessage());
             return new Result(-1, err);
         } finally {
-            //noinspection ResultOfMethodCallIgnored
-            bundle.delete();
+            scheduleBundleDelete(app, bundle);
+        }
+    }
+
+    public static Result inject(
+            Context app, SharedPreferences prefs, int pid, String packageName, List<String> scripts) {
+        return inject(app, prefs, pid, packageName, scripts, false);
+    }
+
+    private static String quote(String path) {
+        return "'" + path.replace("'", "'\\''") + "'";
+    }
+
+    private static boolean isSafeBundlePath(Context app, File bundle) {
+        try {
+            File root = new File(app.getCacheDir(), "inject_bundles").getCanonicalFile();
+            File canon = bundle.getCanonicalFile();
+            String name = canon.getName();
+            if (!name.startsWith("mujde_bundle_") || !name.endsWith(".js")) {
+                return false;
+            }
+            String parent = canon.getParentFile() == null ? "" : canon.getParentFile().getCanonicalPath();
+            return parent.equals(root.getCanonicalPath());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private static void scheduleBundleDelete(Context app, File bundle) {
+        if (bundle == null) return;
+        //noinspection ResultOfMethodCallIgnored
+        if (!bundle.delete()) {
+            // 可能仍被占用：稍后重试
+            new Thread(() -> {
+                try {
+                    TimeUnit.SECONDS.sleep(5);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                //noinspection ResultOfMethodCallIgnored
+                bundle.delete();
+            }, "mujde-bundle-gc").start();
         }
     }
 

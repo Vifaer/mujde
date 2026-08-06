@@ -84,11 +84,18 @@ public class ScriptSelectionActivity extends AppCompatActivity {
         // su + 复制 DB 放到后台，避免主线程 ANR
         new Thread(() -> {
             if (validScripts.isEmpty()) {
+                if (!autoScope) {
+                    runOnUiThread(() -> {
+                        Toast.makeText(this, R.string.scope_unbind_skipped, Toast.LENGTH_LONG).show();
+                        finishOk();
+                    });
+                    return;
+                }
                 RootShell.Result r = ScopeHelper.removeScope(ScriptSelectionActivity.this, packageName);
                 runOnUiThread(() -> {
                     if (r.ok()) {
                         Toast.makeText(this, R.string.scope_removed, Toast.LENGTH_SHORT).show();
-                    } else if (autoScope) {
+                    } else {
                         Toast.makeText(this,
                                 getString(R.string.scope_remove_failed, r.output),
                                 Toast.LENGTH_LONG).show();

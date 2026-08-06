@@ -5,6 +5,7 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.Process;
+import android.os.SystemClock;
 
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -17,8 +18,9 @@ import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
 public class InjectionRequester implements IXposedHookLoadPackage {
-    /** 本进程内已发送过注入请求的 PID（目标进程通常只有自身 PID）。 */
-    private static final ConcurrentHashMap<Integer, Boolean> SENT_FOR_PID = new ConcurrentHashMap<>();
+    /** 防抖：距上次发送短于该间隔则跳过（允许失败后重试，非成功占坑）。 */
+    private static final long SEND_DEBOUNCE_MS = 2000L;
+    private static final ConcurrentHashMap<Integer, Long> LAST_SEND_ELAPSED = new ConcurrentHashMap<>();
 
     private XSharedPreferences getPreferences() {
         XSharedPreferences pref = new XSharedPreferences(BuildConfig.APPLICATION_ID, Constants.SHARED_PREF_FILE_NAME);
@@ -53,7 +55,9 @@ public class InjectionRequester implements IXposedHookLoadPackage {
 
         request.putExtra(intent);
         intent.setAction(Constants.ACTION_INJECT_REQUEST);
-        intent.setComponent(new ComponentName("com.rel.mujde", "com.rel.mujde.InjectionRequestHandler"));
+        intent.setComponent(new ComponentName(
+                BuildConfig.APPLICATION_ID,
+                InjectionRequestHandler.class.getName()));
 
         XposedBridge.log("[Mujde] sending injection request " + request.toString());
         activity.sendBroadcast(intent);
@@ -68,20 +72,13 @@ public class InjectionRequester implements IXposedHookLoadPackage {
             new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    XSharedPreferences pref = getPreferences();
-                    boolean once = true;
-                    try {
-                        once = pref.getBoolean(Constants.PREF_INJECT_ONCE, true);
-                    } catch (Exception ignored) {
-                    }
-
                     int pid = Process.myPid();
-                    if (once) {
-                        if (SENT_FOR_PID.putIfAbsent(pid, Boolean.TRUE) != null) {
-                            return;
-                        }
+                    long now = SystemClock.elapsedRealtime();
+                    Long prev = LAST_SEND_ELAPSED.get(pid);
+                    if (prev != null && now - prev < SEND_DEBOUNCE_MS) {
+                        return;
                     }
-
+                    LAST_SEND_ELAPSED.put(pid, now);
                     sendInjectionRequest((Activity) param.thisObject);
                 }
             }

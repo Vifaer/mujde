@@ -101,4 +101,6 @@
     <string name="template_skeleton">Skeleton（存活验证）</string>
     <string name="template_skeleton_af">Skeleton + 反 Frida 说明</string>
     <string name="template_created">已创建 %1$s</string>
+    <string name="scope_unbind_skipped">映射已清空；未改 LSPosed 作用域（自动写入已关）</string>
+    <string name="prefs_fallback_warning">Xposed 共享 prefs 不可用，已用私有模式打开。请确认 LSPosed 已启用 Mujde。</string>
 </resources>
