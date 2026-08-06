@@ -107,6 +107,18 @@ public final class ScopeHelper {
     }
 
     public static RootShell.Result applyScope(Context context, String targetPkg) {
+        return mutateScope(context, targetPkg, true);
+    }
+
+    /** 从本模块作用域中移除目标包（不解绑 system/android）。 */
+    public static RootShell.Result removeScope(Context context, String targetPkg) {
+        if ("system".equals(targetPkg) || "android".equals(targetPkg)) {
+            return new RootShell.Result(-1, "拒绝移除系统作用域项");
+        }
+        return mutateScope(context, targetPkg, false);
+    }
+
+    private static RootShell.Result mutateScope(Context context, String targetPkg, boolean add) {
         if (targetPkg == null || targetPkg.isEmpty()) {
             return new RootShell.Result(-1, "包名为空");
         }
@@ -114,9 +126,13 @@ public final class ScopeHelper {
             return new RootShell.Result(-1, "无 Root 权限");
         }
 
-        File localDb = null;
         try {
-            localDb = pullDbToCache(context);
+            // 备份远程 DB
+            RootShell.exec(
+                    "cp -f '" + DB_REMOTE + "' '" + DB_REMOTE + ".mujde.bak' 2>/dev/null; echo ok",
+                    8000);
+
+            File localDb = pullDbToCache(context);
             if (localDb == null) {
                 return new RootShell.Result(-1, "无法复制 modules_config.db（路径: " + DB_REMOTE + "）");
             }
@@ -124,9 +140,15 @@ public final class ScopeHelper {
             SQLiteDatabase db = SQLiteDatabase.openDatabase(
                     localDb.getAbsolutePath(), null, SQLiteDatabase.OPEN_READWRITE);
             try {
-                db.execSQL(
-                        "INSERT OR IGNORE INTO scope(module_pkg_name,app_pkg_name,user_id) VALUES(?,?,?)",
-                        new Object[]{MODULE, targetPkg, 0});
+                if (add) {
+                    db.execSQL(
+                            "INSERT OR IGNORE INTO scope(module_pkg_name,app_pkg_name,user_id) VALUES(?,?,?)",
+                            new Object[]{MODULE, targetPkg, 0});
+                } else {
+                    db.execSQL(
+                            "DELETE FROM scope WHERE module_pkg_name=? AND app_pkg_name=? AND user_id=?",
+                            new Object[]{MODULE, targetPkg, 0});
+                }
                 try {
                     db.rawQuery("PRAGMA wal_checkpoint(FULL)", null).close();
                 } catch (Exception ignored) {
@@ -135,7 +157,6 @@ public final class ScopeHelper {
                 db.close();
             }
 
-            // 推回：先清 WAL，再覆盖主库，避免旧 WAL 覆盖新数据
             String local = localDb.getAbsolutePath();
             String cmd =
                     "rm -f '" + DB_REMOTE + "-wal' '" + DB_REMOTE + "-shm' && "
@@ -148,12 +169,18 @@ public final class ScopeHelper {
                 return new RootShell.Result(-1, "写回失败: " + push.output);
             }
 
-            // 校验
             Set<String> now = readScopedPackages(context);
-            if (now.contains(targetPkg)) {
-                return new RootShell.Result(0, "已加入作用域: " + targetPkg);
+            if (add) {
+                if (now.contains(targetPkg)) {
+                    return new RootShell.Result(0, "已加入作用域: " + targetPkg);
+                }
+                return new RootShell.Result(-1, "写回后校验未命中，请重启 LSPosed/设备后再查");
+            } else {
+                if (!now.contains(targetPkg)) {
+                    return new RootShell.Result(0, "已移出作用域: " + targetPkg);
+                }
+                return new RootShell.Result(-1, "删除后校验仍存在，请重启 LSPosed/设备后再查");
             }
-            return new RootShell.Result(-1, "写回后校验未命中，请重启 LSPosed/设备后再查");
         } catch (Exception e) {
             return new RootShell.Result(-1, e.getMessage() == null ? "scope 写入异常" : e.getMessage());
         }

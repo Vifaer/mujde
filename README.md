@@ -5,7 +5,7 @@ LSPosed 模块形态的 **真 Frida 注入管理器**（包名 `com.rel.mujde`�
 维护本地 Frida JS 脚本库 → 按 App 勾选绑定 → 目标 `Activity.onCreate` 时以 root 调用 `libfrida-inject.so` 注入。
 
 > 上游：https://github.com/mon231/com.rel.mujde  
-> 本仓库：本地改造 fork（v1.1.2：作用域 / logcat / 脚本选择 UI 等修复）  
+> 本仓库：本地改造 fork（v1.1.3：合并注入 / 延迟 / 立即注入 / SAF / 解绑清 scope）  
 > LSPosed 模块页：https://modules.lsposed.org/module/com.rel.mujde/  
 > Frida 版本钉死：**17.16.4**
 
@@ -98,12 +98,12 @@ adb shell "pidof <目标包名>"
 
 ## 日常使用
 
-1. **Repository / Scripts**：新建、导入、下拉刷新脚本  
-2. **Apps**：已绑定包置顶 → 勾选脚本并保存（可触发作用域写入）  
+1. **Scripts**：新建、SAF 导入 `.js`/zip、导出 zip、或从 Download 导入示例  
+2. **Apps**：勾选脚本并保存（可自动写 scope）；清空勾选会移出作用域；**长按**已绑定应用 → 立即注入  
 3. **Logs**：查看注入 exit code / 拉 logcat  
-4. **Status**：Frida 版本、su、脚本数、上次注入摘要  
+4. **首页**：Frida 版本、su、脚本数、上次注入摘要；「每进程只注入一次」、注入延迟、自动作用域  
 
-注入时机：`Activity.onCreate`；默认 **每个进程只注入一次**（Status 可关）。
+注入模型：`Activity.onCreate` 触发；多脚本 **合并为一次** `frida-inject`；默认每进程一次（可关）。晚加载 SO 仍靠脚本内等待。
 
 ---
 

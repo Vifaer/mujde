@@ -39,6 +39,10 @@ public class AppListAdapter extends RecyclerView.Adapter<AppListAdapter.ViewHold
 
     public interface OnAppClickListener {
         void onAppClick(String packageName);
+
+        /** 长按：立即注入（可为空操作）。 */
+        default void onAppLongClick(String packageName) {
+        }
     }
 
     public void updateScope(Set<String> newScoped) {
@@ -102,6 +106,13 @@ public class AppListAdapter extends RecyclerView.Adapter<AppListAdapter.ViewHold
             if (onAppClickListener != null) {
                 onAppClickListener.onAppClick(app.packageName);
             }
+        });
+        holder.itemView.setOnLongClickListener(v -> {
+            if (onAppClickListener != null) {
+                onAppClickListener.onAppLongClick(app.packageName);
+                return true;
+            }
+            return false;
         });
     }
 

@@ -4,11 +4,10 @@ import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.os.Process;
 
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
@@ -18,7 +17,8 @@ import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
 public class InjectionRequester implements IXposedHookLoadPackage {
-    private static boolean did_hook = false;
+    /** 本进程内已发送过注入请求的 PID（目标进程通常只有自身 PID）。 */
+    private static final ConcurrentHashMap<Integer, Boolean> SENT_FOR_PID = new ConcurrentHashMap<>();
 
     private XSharedPreferences getPreferences() {
         XSharedPreferences pref = new XSharedPreferences(BuildConfig.APPLICATION_ID, Constants.SHARED_PREF_FILE_NAME);
@@ -47,8 +47,7 @@ public class InjectionRequester implements IXposedHookLoadPackage {
         installHookOnActivityCreation(lpparam);
     }
 
-    private void sendInjectionRequest(Activity activity)
-    {
+    private void sendInjectionRequest(Activity activity) {
         Intent intent = new Intent();
         InjectionRequest request = new InjectionRequest(Process.myPid(), activity.getPackageName());
 
@@ -69,12 +68,21 @@ public class InjectionRequester implements IXposedHookLoadPackage {
             new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    if (did_hook) {
-                        return;
+                    XSharedPreferences pref = getPreferences();
+                    boolean once = true;
+                    try {
+                        once = pref.getBoolean(Constants.PREF_INJECT_ONCE, true);
+                    } catch (Exception ignored) {
                     }
 
-                    sendInjectionRequest((Activity)param.thisObject);
-                    did_hook = true;
+                    int pid = Process.myPid();
+                    if (once) {
+                        if (SENT_FOR_PID.putIfAbsent(pid, Boolean.TRUE) != null) {
+                            return;
+                        }
+                    }
+
+                    sendInjectionRequest((Activity) param.thisObject);
                 }
             }
         );

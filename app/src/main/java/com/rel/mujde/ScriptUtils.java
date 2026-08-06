@@ -180,6 +180,66 @@ public class ScriptUtils {
         return count;
     }
 
+    /** 从 InputStream 写入单个 .js（fileName 需已含扩展名）。 */
+    public static void importScriptStream(Context context, String fileName, java.io.InputStream in)
+            throws IOException {
+        String name = adjustScriptFileName(fileName);
+        File dest = getScriptFile(context, name);
+        File parent = dest.getParentFile();
+        if (parent != null && !parent.exists()) {
+            //noinspection ResultOfMethodCallIgnored
+            parent.mkdirs();
+        }
+        try (FileOutputStream out = new FileOutputStream(dest)) {
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) > 0) {
+                out.write(buf, 0, n);
+            }
+        }
+        AccessibilityUtils.makeFileWorldReadable(dest);
+    }
+
+    /** 从 zip 导入所有顶层/任意路径的 .js（按文件名落盘，同名覆盖）。 */
+    public static int importFromZip(Context context, java.io.InputStream zipIn) throws IOException {
+        int count = 0;
+        try (java.util.zip.ZipInputStream zis = new java.util.zip.ZipInputStream(zipIn)) {
+            java.util.zip.ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                if (entry.isDirectory()) continue;
+                String name = entry.getName();
+                int slash = Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\'));
+                if (slash >= 0) name = name.substring(slash + 1);
+                if (!name.endsWith(Constants.SCRIPT_FILE_EXT) || name.isEmpty()) continue;
+                importScriptStream(context, name, zis);
+                count++;
+                zis.closeEntry();
+            }
+        }
+        return count;
+    }
+
+    /** 将脚本目录打包为 zip 写到 OutputStream。 */
+    public static int exportToZip(Context context, java.io.OutputStream out) throws IOException {
+        List<String> names = listScriptNames(context);
+        try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(out)) {
+            byte[] buf = new byte[8192];
+            for (String name : names) {
+                File f = getScriptFile(context, name);
+                if (!f.isFile()) continue;
+                zos.putNextEntry(new java.util.zip.ZipEntry(name));
+                try (FileInputStream in = new FileInputStream(f)) {
+                    int n;
+                    while ((n = in.read(buf)) > 0) {
+                        zos.write(buf, 0, n);
+                    }
+                }
+                zos.closeEntry();
+            }
+        }
+        return names.size();
+    }
+
     private static void copyFile(File src, File dest) throws IOException {
         try (FileInputStream in = new FileInputStream(src);
              FileOutputStream out = new FileOutputStream(dest)) {

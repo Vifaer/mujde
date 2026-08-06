@@ -74,6 +74,21 @@
                 android:paddingBottom="4dp"
                 android:text="@string/auto_scope"
                 android:textColor="@color/on_surface" />
+
+            <TextView
+                android:id="@+id/text_inject_delay_label"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="12dp"
+                android:text="@string/inject_delay_label"
+                android:textColor="@color/on_surface" />
+
+            <SeekBar
+                android:id="@+id/seek_inject_delay"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="10000"
+                android:paddingBottom="8dp" />
         </LinearLayout>
 
         <com.google.android.material.button.MaterialButton

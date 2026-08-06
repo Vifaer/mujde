@@ -8,7 +8,6 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.view.View;
-import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -82,12 +81,22 @@ public class ScriptSelectionActivity extends AppCompatActivity {
         AccessibilityUtils.makeDirWorldReadable(getFilesDir());
 
         boolean autoScope = prefs.getBoolean(Constants.PREF_AUTO_SCOPE, true);
-        if (validScripts.isEmpty()) {
-            finishOk();
-            return;
-        }
         // su + 复制 DB 放到后台，避免主线程 ANR
         new Thread(() -> {
+            if (validScripts.isEmpty()) {
+                RootShell.Result r = ScopeHelper.removeScope(ScriptSelectionActivity.this, packageName);
+                runOnUiThread(() -> {
+                    if (r.ok()) {
+                        Toast.makeText(this, R.string.scope_removed, Toast.LENGTH_SHORT).show();
+                    } else if (autoScope) {
+                        Toast.makeText(this,
+                                getString(R.string.scope_remove_failed, r.output),
+                                Toast.LENGTH_LONG).show();
+                    }
+                    finishOk();
+                });
+                return;
+            }
             if (autoScope) {
                 RootShell.Result r = ScopeHelper.applyScope(ScriptSelectionActivity.this, packageName);
                 runOnUiThread(() -> {

@@ -2,6 +2,7 @@ package com.rel.mujde;
 
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.FileObserver;
 import android.text.InputType;
@@ -12,6 +13,8 @@ import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
@@ -25,6 +28,8 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -35,6 +40,24 @@ public class ScriptsFragment extends Fragment {
     private final List<String> scriptsList = new ArrayList<>();
     private ScriptAdapter scriptsAdapter;
     private FileObserver observer;
+
+    private ActivityResultLauncher<String[]> pickJsLauncher;
+    private ActivityResultLauncher<String[]> pickZipLauncher;
+    private ActivityResultLauncher<String> createZipLauncher;
+
+    @Override
+    public void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        pickJsLauncher = registerForActivityResult(
+                new ActivityResultContracts.OpenDocument(),
+                this::onJsPicked);
+        pickZipLauncher = registerForActivityResult(
+                new ActivityResultContracts.OpenDocument(),
+                this::onZipPicked);
+        createZipLauncher = registerForActivityResult(
+                new ActivityResultContracts.CreateDocument("application/zip"),
+                this::onZipExportTarget);
+    }
 
     @Nullable
     @Override
@@ -66,11 +89,103 @@ public class ScriptsFragment extends Fragment {
         swipeRefresh.setColorSchemeResources(R.color.accent, R.color.secondary);
         swipeRefresh.setOnRefreshListener(this::loadScripts);
         fabAdd.setOnClickListener(v -> showAddScriptDialog());
-        fabImport.setOnClickListener(v -> importExamples());
+        fabImport.setOnClickListener(v -> showImportExportMenu());
         fabImport.setContentDescription(getString(R.string.import_scripts));
 
         loadScripts();
         return view;
+    }
+
+    private void showImportExportMenu() {
+        if (!isAdded()) return;
+        CharSequence[] items = new CharSequence[]{
+                getString(R.string.import_js),
+                getString(R.string.import_zip),
+                getString(R.string.export_zip),
+                getString(R.string.import_examples)
+        };
+        new AlertDialog.Builder(requireContext())
+                .setTitle(R.string.import_menu_title)
+                .setItems(items, (d, which) -> {
+                    switch (which) {
+                        case 0:
+                            pickJsLauncher.launch(new String[]{"application/javascript", "text/javascript", "text/plain", "*/*"});
+                            break;
+                        case 1:
+                            pickZipLauncher.launch(new String[]{"application/zip", "application/x-zip-compressed", "*/*"});
+                            break;
+                        case 2:
+                            createZipLauncher.launch("mujde-scripts.zip");
+                            break;
+                        case 3:
+                            importExamples();
+                            break;
+                        default:
+                            break;
+                    }
+                })
+                .show();
+    }
+
+    private void onJsPicked(@Nullable Uri uri) {
+        if (uri == null || !isAdded()) return;
+        try {
+            String name = guessName(uri, "imported.js");
+            try (InputStream in = requireContext().getContentResolver().openInputStream(uri)) {
+                if (in == null) throw new IOException("无法打开文件");
+                ScriptUtils.importScriptStream(requireContext(), name, in);
+            }
+            Toast.makeText(requireContext(), getString(R.string.imported_scripts, 1), Toast.LENGTH_SHORT).show();
+            loadScripts();
+        } catch (Exception e) {
+            Toast.makeText(requireContext(),
+                    getString(R.string.import_failed, String.valueOf(e.getMessage())),
+                    Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void onZipPicked(@Nullable Uri uri) {
+        if (uri == null || !isAdded()) return;
+        try {
+            int n;
+            try (InputStream in = requireContext().getContentResolver().openInputStream(uri)) {
+                if (in == null) throw new IOException("无法打开 zip");
+                n = ScriptUtils.importFromZip(requireContext(), in);
+            }
+            Toast.makeText(requireContext(), getString(R.string.imported_scripts, n), Toast.LENGTH_SHORT).show();
+            loadScripts();
+        } catch (Exception e) {
+            Toast.makeText(requireContext(),
+                    getString(R.string.import_failed, String.valueOf(e.getMessage())),
+                    Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void onZipExportTarget(@Nullable Uri uri) {
+        if (uri == null || !isAdded()) return;
+        try {
+            int n;
+            try (OutputStream out = requireContext().getContentResolver().openOutputStream(uri)) {
+                if (out == null) throw new IOException("无法创建文件");
+                n = ScriptUtils.exportToZip(requireContext(), out);
+            }
+            Toast.makeText(requireContext(), getString(R.string.exported_scripts, n), Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {
+            Toast.makeText(requireContext(),
+                    getString(R.string.export_failed, String.valueOf(e.getMessage())),
+                    Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private String guessName(Uri uri, String fallback) {
+        String last = uri.getLastPathSegment();
+        if (last == null || last.isEmpty()) return fallback;
+        int slash = Math.max(last.lastIndexOf('/'), last.lastIndexOf(':'));
+        if (slash >= 0) last = last.substring(slash + 1);
+        if (!last.endsWith(Constants.SCRIPT_FILE_EXT)) {
+            last = ScriptUtils.adjustScriptFileName(last);
+        }
+        return last;
     }
 
     @Override

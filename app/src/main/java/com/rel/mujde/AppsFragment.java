@@ -15,11 +15,13 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.ProgressBar;
+import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.widget.SearchView;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
@@ -114,6 +116,25 @@ public class AppsFragment extends Fragment implements SearchView.OnQueryTextList
         scriptSelectLauncher.launch(intent);
     }
 
+    private void injectNow(String packageName) {
+        if (!isAdded() || packageName == null) return;
+        Toast.makeText(requireContext(), R.string.inject_now_running, Toast.LENGTH_SHORT).show();
+        final Context appCtx = requireContext().getApplicationContext();
+        executor.execute(() -> {
+            String result = InjectionRequestHandler.injectNow(appCtx, packageName);
+            Activity activity = getActivity();
+            if (activity == null || !isAdded()) return;
+            activity.runOnUiThread(() -> {
+                if (!isAdded()) return;
+                new AlertDialog.Builder(requireContext())
+                        .setTitle(R.string.inject_now)
+                        .setMessage(getString(R.string.inject_now_done, result))
+                        .setPositiveButton(android.R.string.ok, null)
+                        .show();
+            });
+        });
+    }
+
     private void loadEnabledApps() {
         if (!isAdded() || loadingProgress == null) return;
         final int gen = loadGen.incrementAndGet();
@@ -165,7 +186,17 @@ public class AppsFragment extends Fragment implements SearchView.OnQueryTextList
                         enabledApps,
                         appScriptMappings,
                         scopedPackages,
-                        this::openScriptSelection
+                        new AppListAdapter.OnAppClickListener() {
+                            @Override
+                            public void onAppClick(String packageName) {
+                                openScriptSelection(packageName);
+                            }
+
+                            @Override
+                            public void onAppLongClick(String packageName) {
+                                injectNow(packageName);
+                            }
+                        }
                 );
                 appListRecyclerView.setAdapter(adapter);
                 loadingProgress.setVisibility(View.GONE);
