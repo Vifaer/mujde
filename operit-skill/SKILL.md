@@ -16,7 +16,7 @@ description: 编写/部署/调试 Mujde（com.rel.mujde）真 Frida 脚本。覆
 | 项 | 值 |
 |----|-----|
 | 包名 | `com.rel.mujde` |
-| 版本 | **1.1.0**（源码 `frida-modules-dl/mujde-app/`，APK `Mujde-v1.1.0-debug.apk`） |
+| 版本 | **1.1.2**（源码仓库 https://github.com/Vifaer/mujde ，本地 `frida-modules-dl/mujde-app/`） |
 | 引擎 | 真 Frida **17.16.4**（`su -c …/libfrida-inject.so -e -p PID -s script.js`） |
 | 脚本目录 | `/data/data/com.rel.mujde/files/scripts/` |
 | 日志目录 | `/data/data/com.rel.mujde/files/logs/`（应用内 Logs 页） |
