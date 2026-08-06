@@ -36,7 +36,6 @@ public class InjectionRequestHandler extends BroadcastReceiver {
         }
     }
 
-    /** 供 injectNow 成功后与自动路径对齐 */
     static void markInjectedOk(int pid) {
         if (pid > 0) {
             INJECTED_OK.put(pid, System.currentTimeMillis());
@@ -46,6 +45,8 @@ public class InjectionRequestHandler extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
         final Context app = context.getApplicationContext();
+        // 尽早拉起 FGS，避免后续校验期间进程被杀
+        InjectionService.start(app);
 
         final InjectionRequest request = InjectionRequest.fromExtra(intent);
         if (request == null || request.getPid() < 1) {
@@ -79,34 +80,31 @@ public class InjectionRequestHandler extends BroadcastReceiver {
             return;
         }
 
-        // 昂贵校验放在廉价拒绝之后
-        if (!PidOwner.owns(pid, pkg)) {
+        PidOwner.Verdict verdict = PidOwner.check(pid, pkg);
+        if (verdict == PidOwner.Verdict.MISMATCH) {
             IN_FLIGHT.remove(pid);
             LogStore.append(app, "inject: pid_owner_mismatch pid=" + pid + " pkg=" + pkg);
             return;
         }
+        if (verdict == PidOwner.Verdict.UNKNOWN) {
+            LogStore.append(app, "inject: pid_owner_unknown 放行 pid=" + pid + " pkg=" + pkg);
+        }
 
-        InjectionService.start(app);
-
-        // 调度后立即 finish，不跨 delay+inject 持有 PendingResult
+        // 持有 PendingResult 直到注入结束（1.2.1 早 finish 会导致部分 ROM 丢掉延迟任务）
         final PendingResult pending = goAsync();
         worker().postDelayed(() -> {
             try {
                 FridaInjector.Result r = FridaInjector.inject(app, prefs, pid, pkg, scripts, true);
-                // 已通过 PidOwner，inject 内 skip 二次校验
                 if (r.ok && once) {
                     markInjectedOk(pid);
                 }
             } finally {
                 IN_FLIGHT.remove(pid);
+                pending.finish();
             }
         }, Math.max(0, delayMs));
-        pending.finish();
     }
 
-    /**
-     * 立即注入：忽略「跳过已成功」；pid 来自 pidof，跳过 cmdline 二次校验。
-     */
     public static String injectNow(Context context, String packageName) {
         Context app = context.getApplicationContext();
         InjectionService.start(app);

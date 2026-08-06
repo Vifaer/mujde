@@ -73,7 +73,7 @@ public final class FridaInjector {
         if (!PidOwner.isSafePackageName(packageName)) {
             return new Result(-1, "非法包名");
         }
-        if (!skipPidOwnerCheck && !PidOwner.owns(pid, packageName)) {
+        if (!skipPidOwnerCheck && !PidOwner.allowInject(pid, packageName)) {
             String msg = "pid_owner_mismatch pid=" + pid + " pkg=" + packageName;
             LogStore.append(app, msg);
             return new Result(-1, msg);

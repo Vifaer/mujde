@@ -48,7 +48,11 @@
         <receiver
             android:name=".InjectionRequestHandler"
             android:exported="true"
-            android:enabled="true" />
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="com.rel.mujde.INJECT_REQUEST" />
+            </intent-filter>
+        </receiver>
 
         <receiver
             android:name=".BootReceiver"
