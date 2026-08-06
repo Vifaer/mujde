@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 科技现代：深空蓝底 + 电青强调 -->
+    <color name="bg">#FF0A0F1A</color>
+    <color name="surface">#FF121A2B</color>
+    <color name="surface_elevated">#FF1A2438</color>
+    <color name="stroke">#FF243047</color>
+
+    <color name="accent">#FF22D3EE</color>
+    <color name="accent_dim">#FF0891B2</color>
+    <color name="accent_soft">#3322D3EE</color>
+    <color name="secondary">#FF818CF8</color>
+
+    <color name="on_surface">#FFF1F5F9</color>
+    <color name="on_surface_muted">#FF94A3B8</color>
+    <color name="danger">#FFF43F5E</color>
+    <color name="success">#FF34D399</color>
+
+    <!-- 兼容旧引用 -->
+    <color name="lsp_bg">@color/bg</color>
+    <color name="lsp_surface">@color/surface</color>
+    <color name="lsp_surface_variant">@color/surface_elevated</color>
+    <color name="lsp_accent">@color/accent</color>
+    <color name="lsp_accent_dark">@color/accent_dim</color>
+    <color name="purple_200">@color/secondary</color>
+    <color name="purple_500">@color/accent</color>
+    <color name="purple_700">@color/accent_dim</color>
+    <color name="teal_200">@color/accent</color>
+    <color name="teal_700">@color/accent_dim</color>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="red">@color/danger</color>
+</resources>

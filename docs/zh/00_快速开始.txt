@@ -1,0 +1,61 @@
+Mujde v1.0.0 — 快速开始（中文）
+================================
+更新日期: 2026-07-31（含 KernelSU / Unity 实测结论）
+
+设备前提
+--------
+- Root：KernelSU（本机）/ Magisk
+- LSPosed（Zygisk）+ ZygiskNext / NeoZygisk
+- 已装 Mujde：com.rel.mujde
+- KernelSU → 超级用户 → **必须授权 Mujde**（否则无法 su 注入）
+
+安装与启用
+----------
+1. 安装 APK:
+     adb install -r /sdcard/Download/frida-modules/Mujde-v1.0.0.apk
+2. LSPosed → 模块 → Mujde 开 → 作用域勾目标包（如 com.zcs.udpmysteryforest）
+3. KernelSU → 超级用户 → 允许 com.rel.mujde
+4. Mujde → Scripts 放脚本 → Apps 勾选 → 强制停止目标 App → 冷启动
+
+脚本放哪里
+----------
+【官方运行目录】（需 Root）
+  /data/data/com.rel.mujde/files/scripts/
+
+【暂存/文档】
+  /sdcard/Download/frida-modules/mujde/
+  └── scripts/examples/
+        mujde_hello.js
+        mysteryforest_learning_skeleton.js   ← 推荐先跑这个（已验证可存活）
+        mysteryforest_readonly_*.js
+
+拷贝示例:
+  sh /sdcard/Download/frida-modules/mujde/install_scripts.sh
+  # 或 Root: cp ... && chmod 644 && chown <mujde_uid>:<mujde_uid> ...
+
+看日志（重要）
+--------------
+  adb logcat -s "[Mujde]:D"          # 注入是否发起 / su 错误
+  adb logcat -s MF_LEARN:I           # 学习骨架（liblog）
+  adb logcat | findstr /i "READONLY MujdeExample"
+
+成功时应看到:
+  [Mujde] about to frida-inject xxx.js into InjectionRequest{...}
+  且没有: Cannot run program "su": error=13, Permission denied
+
+本机已验证踩坑（必读）
+----------------------
+1. KernelSU 未给 Mujde root → su Permission denied，脚本完全不跑
+2. get_detectCheat 仅 8 字节 → Interceptor.replace/attach 都会 SIGSEGV 闪退
+3. 本 Unity 游戏上 Java.perform + Toast → SIGSEGV 闪退；用 liblog 打 logcat
+4. //Mujde: { packages:[...] } 文件头无效，必须 Apps 勾选
+5. 每次 Activity.onCreate 重注入 → 必须 globalThis 重入保护
+6. Mujde 不读 frida-inject 退出码；失败时界面无提示，只看 logcat
+
+详细文档
+--------
+  01_使用说明.md
+  02_脚本存放路径.md
+  03_脚本编写规范.md
+  04_与LSPilot_KsuFrida对比.md
+  05_故障排查.md
