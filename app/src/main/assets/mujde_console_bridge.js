@@ -1,5 +1,6 @@
-/* Mujde console bridge v1 — 注入包最前自动附带
- * 将 console / send 写入 /data/local/tmp/mujde-console.log，并用 liblog 打 TAG。
+/* Mujde console bridge v1.1 — 注入包最前自动附带
+ * 将 console 写入 /data/local/tmp/mujde-console.log，并用 liblog 打 TAG。
+ * 注意：Frida 的 send 为只读，禁止重写（否则整包脚本加载失败）。
  * TAG 由宿主替换占位符 __MUJDE_LOG_TAG__。
  */
 'use strict';
@@ -33,8 +34,10 @@
         var O_WRONLY = 1, O_CREAT = 64, O_APPEND = 1024;
         var fd = openPtr(Memory.allocUtf8String(PATH), O_WRONLY | O_CREAT | O_APPEND, 0x1b6);
         if (fd >= 0) {
-          var payload = Memory.allocUtf8String(line + '\n');
-          writePtr(fd, payload, line.length + 1);
+          var bytes = Memory.allocUtf8String(line + '\n');
+          var n = 0;
+          try { n = bytes.readUtf8String().length; } catch (e3) { n = line.length + 1; }
+          writePtr(fd, bytes, n);
           closePtr(fd);
         }
       }
@@ -53,22 +56,27 @@
     return parts.join(' ');
   }
 
-  var orig = {
-    log: console.log,
-    warn: console.warn,
-    error: console.error
-  };
-  console.log = function () { var s = stringify(arguments); alog(s); try { orig.log.apply(console, arguments); } catch (e) {} };
-  console.warn = function () { var s = 'WARN ' + stringify(arguments); alog(s); try { orig.warn.apply(console, arguments); } catch (e) {} };
-  console.error = function () { var s = 'ERR ' + stringify(arguments); alog(s); try { orig.error.apply(console, arguments); } catch (e) {} };
-
-  if (typeof send === 'function') {
-    var origSend = send;
-    send = function (payload, data) {
-      try { alog('send ' + (typeof payload === 'string' ? payload : JSON.stringify(payload))); } catch (e) {}
-      return origSend(payload, data);
+  try {
+    var origLog = console.log;
+    var origWarn = console.warn;
+    var origError = console.error;
+    console.log = function () {
+      alog(stringify(arguments));
+      try { return origLog.apply(console, arguments); } catch (e) {}
     };
+    console.warn = function () {
+      alog('WARN ' + stringify(arguments));
+      try { return origWarn.apply(console, arguments); } catch (e) {}
+    };
+    console.error = function () {
+      alog('ERR ' + stringify(arguments));
+      try { return origError.apply(console, arguments); } catch (e) {}
+    };
+  } catch (e) {
+    alog('console wrap skipped: ' + e);
   }
+
+  // 不重写全局 send（Frida 17+ 为 read-only，赋值会炸整包）
 
   alog('console bridge ready tag=' + TAG);
 })();
